@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import (
-    QEasingCurve, QPropertyAnimation, QRect, QRectF, Qt, Signal,
+    QEasingCurve, QPropertyAnimation, QRect, QRectF, Qt, QVariantAnimation,
+    Signal,
 )
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QWheelEvent
 from PySide6.QtWidgets import (
     QFrame, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QHBoxLayout,
     QLabel, QSizePolicy, QVBoxLayout, QWidget,
@@ -43,7 +44,13 @@ class Card(QFrame):
         super().__init__(parent)
         self.setObjectName("Card")
         self.setFrameShape(QFrame.NoFrame)
+        self._has_shadow = shadow
         if shadow:
+            attach_shadow(self, blur=24, dy=8, alpha=28)
+
+    def restore_shadow(self) -> None:
+        """Reaplica a sombra (usado após animações de opacidade)."""
+        if self._has_shadow:
             attach_shadow(self, blur=24, dy=8, alpha=28)
 
 
@@ -98,6 +105,12 @@ class SummaryCard(QFrame):
         outer.addLayout(col, 1)
 
         self._pulse_anim: QPropertyAnimation | None = None
+        self._count_anim: QVariantAnimation | None = None
+        self._shown: float | None = None  # valor numérico atualmente exibido
+
+    def restore_shadow(self) -> None:
+        """Reaplica a sombra (usado após animações de opacidade)."""
+        self._shadow = attach_shadow(self, blur=24, dy=8, alpha=26)
 
     # ---- valor + pulse ----
     def set_value(self, value: str, animate: bool = True) -> None:
@@ -105,6 +118,43 @@ class SummaryCard(QFrame):
         self._value.setText(value)
         if changed and animate:
             self._pulse()
+
+    # ---- valor numérico com contagem animada (odômetro) ----
+    def set_numeric(self, value: float, formatter, animate: bool = True) -> None:
+        """Anima o valor exibido contando do número atual até o novo.
+
+        formatter: callable(float) -> str (ex.: format_brl).
+        """
+        target = float(value)
+        if self._count_anim is not None:
+            self._count_anim.stop()
+            self._count_anim = None
+        if not animate or not self.isVisible() or self._shown is None:
+            self._shown = target
+            self._value.setText(formatter(target))
+            return
+        if abs(self._shown - target) < 1e-9:
+            self._value.setText(formatter(target))
+            return
+
+        anim = QVariantAnimation(self)
+        anim.setStartValue(float(self._shown))
+        anim.setEndValue(target)
+        anim.setDuration(420)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        def _tick(v):
+            self._shown = float(v)
+            self._value.setText(formatter(self._shown))
+
+        def _done():
+            self._shown = target
+            self._value.setText(formatter(target))
+
+        anim.valueChanged.connect(_tick)
+        anim.finished.connect(_done)
+        anim.start()
+        self._count_anim = anim
 
     def _pulse(self) -> None:
         eff = QGraphicsOpacityEffect(self._value)
@@ -160,7 +210,8 @@ class _MonthCell(QWidget):
         self._label = label
         self._index = index
         self._active = False
-        self._hover = False
+        self._hover_t = 0.0
+        self._hover_anim: QVariantAnimation | None = None
         self.setCursor(Qt.PointingHandCursor)
         self.setAttribute(Qt.WA_Hover, True)
         self.setMinimumHeight(38)
@@ -171,14 +222,29 @@ class _MonthCell(QWidget):
             self._active = active
             self.update()
 
+    def _animate_hover(self, target: float, dur: int) -> None:
+        if self._hover_anim is not None:
+            self._hover_anim.stop()
+        anim = QVariantAnimation(self)
+        anim.setStartValue(self._hover_t)
+        anim.setEndValue(target)
+        anim.setDuration(dur)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        def _tick(v):
+            self._hover_t = float(v)
+            self.update()
+
+        anim.valueChanged.connect(_tick)
+        anim.start()
+        self._hover_anim = anim
+
     def enterEvent(self, e):
-        self._hover = True
-        self.update()
+        self._animate_hover(1.0, theme.DUR_FAST)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
-        self._hover = False
-        self.update()
+        self._animate_hover(0.0, theme.DUR_BASE)
         super().leaveEvent(e)
 
     def mousePressEvent(self, e):
@@ -190,10 +256,13 @@ class _MonthCell(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         r = QRectF(self.rect()).adjusted(2, 2, -2, -2)
+        t = self._hover_t if not self._active else 0.0
 
-        if not self._active and self._hover:
+        if t > 0.01:
+            bg = QColor(theme.PRIMARY_SOFT)
+            bg.setAlphaF(t)
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor(theme.PRIMARY_SOFT))
+            p.setBrush(bg)
             p.drawRoundedRect(r, 9, 9)
 
         if self._active:
@@ -202,7 +271,13 @@ class _MonthCell(QWidget):
             font.setPointSize(10)
             font.setWeight(QFont.DemiBold)
         else:
-            color = QColor(theme.PRIMARY if self._hover else theme.TEXT_MUTED)
+            base = QColor(theme.TEXT_MUTED)
+            hov = QColor(theme.PRIMARY)
+            color = QColor(
+                int(base.red() + (hov.red() - base.red()) * t),
+                int(base.green() + (hov.green() - base.green()) * t),
+                int(base.blue() + (hov.blue() - base.blue()) * t),
+            )
             font = QFont(theme.FONT_FAMILY)
             font.setPointSize(10)
             font.setWeight(QFont.Medium)
@@ -288,12 +363,23 @@ class MonthSelector(QWidget):
             self._pill.show()
             return
         anim = QPropertyAnimation(self._pill, b"geometry", self)
-        anim.setDuration(theme.DUR_SLOW)
+        anim.setDuration(380)
         anim.setStartValue(self._pill.geometry())
         anim.setEndValue(target)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
+        curve = QEasingCurve(QEasingCurve.OutBack)
+        curve.setOvershoot(1.08)
+        anim.setEasingCurve(curve)
         anim.start()
         self._pill_anim = anim
+
+    def wheelEvent(self, e: QWheelEvent) -> None:
+        """Roda do mouse navega entre os meses."""
+        delta = -1 if e.angleDelta().y() > 0 else 1
+        novo = max(1, min(12, self._current + delta))
+        if novo != self._current:
+            self.set_month(novo, animate=True)
+            self.monthChanged.emit(novo)
+        e.accept()
 
     def showEvent(self, e):
         super().showEvent(e)

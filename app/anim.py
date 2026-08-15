@@ -6,7 +6,8 @@ fiquem consistentes e o código não espalhe lógica de animação solta.
 from __future__ import annotations
 
 from PySide6.QtCore import (
-    QAbstractAnimation, QEasingCurve, QPoint, QPropertyAnimation, Qt,
+    QAbstractAnimation, QEasingCurve, QPoint, QPropertyAnimation, Qt, QTimer,
+    QVariantAnimation,
 )
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
@@ -90,3 +91,61 @@ def make_opacity(widget: QWidget, start: float = 1.0) -> tuple[QGraphicsOpacityE
     widget.setGraphicsEffect(eff)
     eff.setOpacity(start)
     return eff, eff.setOpacity
+
+
+def stagger_fade(
+    widgets,
+    *,
+    start_delay: int = 40,
+    step: int = 70,
+    duration: int = 420,
+) -> None:
+    """Entrada em cascata: cada widget faz fade-in com um pequeno atraso.
+
+    Widgets que expõem ``restore_shadow()`` (Card/SummaryCard) têm a sombra
+    reaplicada ao fim — o efeito de opacidade substitui temporariamente o
+    QGraphicsDropShadowEffect (Qt permite apenas um efeito por widget).
+    """
+    for i, w in enumerate(widgets):
+        if w is None:
+            continue
+        eff = QGraphicsOpacityEffect(w)
+        w.setGraphicsEffect(eff)
+        eff.setOpacity(0.0)
+
+        def _go(w=w, eff=eff):
+            anim = QPropertyAnimation(eff, b"opacity", w)
+            anim.setDuration(duration)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(_curve(EASE_OUT))
+
+            def _done(w=w):
+                w.setGraphicsEffect(None)
+                if hasattr(w, "restore_shadow"):
+                    w.restore_shadow()
+
+            anim.finished.connect(_done)
+            anim.start(QAbstractAnimation.DeleteWhenStopped)
+
+        QTimer.singleShot(start_delay + i * step, _go)
+
+
+def count_to(
+    owner: QWidget,
+    start: float,
+    end: float,
+    on_tick,
+    *,
+    duration: int = 380,
+    curve: QEasingCurve.Type = EASE_OUT,
+) -> QVariantAnimation:
+    """Anima um número de start→end chamando on_tick(float) a cada frame."""
+    anim = QVariantAnimation(owner)
+    anim.setStartValue(float(start))
+    anim.setEndValue(float(end))
+    anim.setDuration(duration)
+    anim.setEasingCurve(_curve(curve))
+    anim.valueChanged.connect(lambda v: on_tick(float(v)))
+    anim.start(QAbstractAnimation.DeleteWhenStopped)
+    return anim

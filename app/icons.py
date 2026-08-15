@@ -89,6 +89,18 @@ _ICONS: dict[str, str] = {
                 '<polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
     "file-text": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>'
                  '<path d="M14 2v5h5"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+    # extras UI
+    "inbox": '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>'
+             '<path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89'
+             'A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    "loader": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    "sparkles": '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 '
+                '1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1'
+                '-1.288-1.287Z"/><path d="M5 3v4"/><path d="M19 17v4"/>'
+                '<path d="M3 5h4"/><path d="M17 19h4"/>',
+    "calendar-check": '<path d="M8 2v4"/><path d="M16 2v4"/>'
+                      '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>'
+                      '<path d="m9 16 2 2 4-4"/>',
 }
 
 
@@ -135,6 +147,27 @@ def pixmap(name: str, color: str = "#0F172A", size: int = 20, stroke: float = 2.
 
 def icon(name: str, color: str = "#0F172A", size: int = 20, stroke: float = 2.0) -> QIcon:
     return QIcon(pixmap(name, color, size, stroke))
+
+
+def rotated_pixmap(
+    name: str, color: str, size: int, angle: float, stroke: float = 2.0
+) -> QPixmap:
+    """Pixmap do ícone rotacionado ao redor do centro (para spinners)."""
+    base = pixmap(name, color, size, stroke)
+    dpr = base.devicePixelRatio()
+    out = QPixmap(base.size())
+    out.setDevicePixelRatio(dpr)
+    out.fill(Qt.transparent)
+    p = QPainter(out)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    c = size / 2.0
+    p.translate(c, c)
+    p.rotate(angle)
+    p.translate(-c, -c)
+    p.drawPixmap(0, 0, base)
+    p.end()
+    return out
 
 
 def has(name: str) -> bool:

@@ -12,8 +12,8 @@ from PySide6.QtGui import (
     QPen, QWheelEvent,
 )
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QDialog, QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from .. import icons
@@ -27,10 +27,12 @@ SHADOW_MARGIN = 14  # margem ao redor da janela para a sombra
 
 
 # =====================================================================
-#  AnimatedButton — QPushButton com ripple (Material) e feedback de clique
+#  AnimatedButton — ripple (Material) + hover animado + glow opcional
 # =====================================================================
 class AnimatedButton(QPushButton):
-    """Botão com efeito ripple ao clicar. Herda todo o QSS por objectName."""
+    """Botão com ripple ao clicar, brilho de hover animado e, opcionalmente,
+    uma sombra colorida ("glow") que se intensifica no hover. Herda todo o
+    QSS por objectName."""
 
     def __init__(
         self,
@@ -38,6 +40,7 @@ class AnimatedButton(QPushButton):
         *,
         radius: int = 10,
         ripple_light: bool = False,
+        glow: bool = False,
         parent=None,
     ):
         super().__init__(text, parent)
@@ -50,6 +53,19 @@ class AnimatedButton(QPushButton):
         self._ripple_opacity = 0.0
         self._ripple_center = QPointF()
         self._ripple_anim: QParallelAnimationGroup | None = None
+        self._hover_t = 0.0
+        self._hover_anim: QPropertyAnimation | None = None
+        self._glow: QGraphicsDropShadowEffect | None = None
+        self._glow_anim: QPropertyAnimation | None = None
+        if glow:
+            self._glow = QGraphicsDropShadowEffect(self)
+            self._glow.setBlurRadius(18)
+            self._glow.setXOffset(0)
+            self._glow.setYOffset(5)
+            c = QColor(theme.PRIMARY)
+            c.setAlpha(80)
+            self._glow.setColor(c)
+            self.setGraphicsEffect(self._glow)
         self.setAttribute(Qt.WA_Hover, True)
 
     @staticmethod
@@ -79,6 +95,49 @@ class AnimatedButton(QPushButton):
         self.update()
 
     rippleOpacity = Property(float, _get_ro, _set_ro)
+
+    def _get_ht(self) -> float:
+        return self._hover_t
+
+    def _set_ht(self, v: float) -> None:
+        self._hover_t = v
+        self.update()
+
+    hoverProgress = Property(float, _get_ht, _set_ht)
+
+    # ---- hover animado ----
+    def _animate_hover(self, target: float) -> None:
+        if self._hover_anim is not None:
+            self._hover_anim.stop()
+        anim = QPropertyAnimation(self, b"hoverProgress", self)
+        anim.setDuration(theme.DUR_FAST)
+        anim.setStartValue(self._hover_t)
+        anim.setEndValue(target)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.start()
+        self._hover_anim = anim
+        if self._glow is not None:
+            if self._glow_anim is not None:
+                self._glow_anim.stop()
+            ganim = QPropertyAnimation(self._glow, b"blurRadius", self)
+            ganim.setDuration(180)
+            ganim.setStartValue(self._glow.blurRadius())
+            ganim.setEndValue(30 if target > 0.5 else 18)
+            ganim.setEasingCurve(QEasingCurve.OutCubic)
+            ganim.start()
+            self._glow_anim = ganim
+            c = QColor(theme.PRIMARY)
+            c.setAlpha(120 if target > 0.5 else 80)
+            self._glow.setColor(c)
+
+    def enterEvent(self, e):
+        if self.isEnabled():
+            self._animate_hover(1.0)
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self._animate_hover(0.0)
+        super().leaveEvent(e)
 
     # ---- disparo do ripple ----
     def mousePressEvent(self, e: QMouseEvent):
@@ -118,20 +177,32 @@ class AnimatedButton(QPushButton):
 
     def paintEvent(self, e):
         super().paintEvent(e)  # QSS pinta fundo, borda e texto
-        if self._ripple_opacity <= 0.01 or self._ripple_radius <= 0.5:
+        needs_hover = self._hover_t > 0.01 and self.isEnabled()
+        needs_ripple = self._ripple_opacity > 0.01 and self._ripple_radius > 0.5
+        if not needs_hover and not needs_ripple:
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         clip = QPainterPath()
         clip.addRoundedRect(QRectF(self.rect()), self._radius, self._radius)
         p.setClipPath(clip)
-        color = QColor(self._ripple_color)
-        color.setAlphaF(color.alphaF() * self._ripple_opacity)
-        p.setBrush(color)
-        p.setPen(Qt.NoPen)
-        p.drawEllipse(
-            self._ripple_center, self._ripple_radius, self._ripple_radius
-        )
+        if needs_hover:
+            # véu de hover: branco sobre botões coloridos, tinta índigo nos claros
+            if self._ripple_light:
+                veil = QColor(255, 255, 255, int(26 * self._hover_t))
+            else:
+                veil = QColor(79, 70, 229, int(14 * self._hover_t))
+            p.setPen(Qt.NoPen)
+            p.setBrush(veil)
+            p.drawRoundedRect(QRectF(self.rect()), self._radius, self._radius)
+        if needs_ripple:
+            color = QColor(self._ripple_color)
+            color.setAlphaF(color.alphaF() * self._ripple_opacity)
+            p.setBrush(color)
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(
+                self._ripple_center, self._ripple_radius, self._ripple_radius
+            )
         p.end()
 
 
@@ -464,11 +535,35 @@ class _SlideOverlay(QWidget):
         if self._out is None or self._in is None:
             return
         p = QPainter(self)
-        w = self.width()
+        w, h = self.width(), self.height()
         d = self._dir
-        shift = self._p * w
-        p.drawPixmap(int(round(-d * shift)), 0, self._out)
-        p.drawPixmap(int(round(d * w - d * shift)), 0, self._in)
+        t = self._p
+        shift = t * w
+
+        # página que sai: parallax (45% da velocidade) + véu que escurece
+        p.drawPixmap(int(round(-d * shift * 0.45)), 0, self._out)
+        p.fillRect(self.rect(), QColor(15, 23, 42, int(34 * t)))
+
+        # página que entra por cima, com sombra na aresta de ataque
+        x_in = d * w - d * shift
+        p.drawPixmap(int(round(x_in)), 0, self._in)
+
+        edge_w = 26
+        alpha = int(46 * (1.0 - t))
+        if alpha > 2:
+            if d > 0:
+                grad = QLinearGradient(x_in - edge_w, 0, x_in, 0)
+            else:
+                edge_x = x_in + w
+                grad = QLinearGradient(edge_x + edge_w, 0, edge_x, 0)
+            grad.setColorAt(0.0, QColor(15, 23, 42, 0))
+            grad.setColorAt(1.0, QColor(15, 23, 42, alpha))
+            p.setPen(Qt.NoPen)
+            p.setBrush(grad)
+            if d > 0:
+                p.drawRect(QRectF(x_in - edge_w, 0, edge_w, h))
+            else:
+                p.drawRect(QRectF(x_in + w, 0, edge_w, h))
         p.end()
 
 
@@ -481,7 +576,7 @@ class AnimatedStackedWidget(QWidget):
     resultando em movimento suave (60fps) mesmo com cards, sombras e gráfico.
     """
 
-    DURATION = 300  # ms
+    DURATION = 340  # ms
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -573,7 +668,7 @@ class AnimatedStackedWidget(QWidget):
         anim.setDuration(self.DURATION)
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.setEasingCurve(QEasingCurve.OutQuint)
 
         def cleanup(nw=new_w):
             nw.setGeometry(0, 0, self.width(), self.height())
@@ -594,72 +689,130 @@ class AnimatedStackedWidget(QWidget):
 
 
 # =====================================================================
-#  NavItem — item de navegação (ícone vetorial + rótulo)
+#  NavItem — item de navegação com morphing animado (ícone + rótulo)
 # =====================================================================
+def _mix(c1: QColor, c2: QColor, t: float) -> QColor:
+    t = max(0.0, min(1.0, t))
+    return QColor(
+        int(c1.red() + (c2.red() - c1.red()) * t),
+        int(c1.green() + (c2.green() - c1.green()) * t),
+        int(c1.blue() + (c2.blue() - c1.blue()) * t),
+    )
+
+
 class NavItem(QWidget):
+    """Item da navegação: crossfade de cor, leve elevação do ícone ao ativar
+    e hover suave — tudo pintado à mão para transições contínuas."""
+
     clicked = Signal(int)
 
     def __init__(self, icon_name: str, label: str, index: int, parent=None):
         super().__init__(parent)
         self._index = index
-        self._active = False
-        self._hover = False
+        self._label = label
+        self._t = 0.0        # progresso de ativação (0 → 1)
+        self._h = 0.0        # progresso de hover
+        self._t_anim: QPropertyAnimation | None = None
+        self._h_anim: QPropertyAnimation | None = None
         self.setFixedSize(150, 56)
         self.setCursor(Qt.PointingHandCursor)
         self.setAttribute(Qt.WA_Hover, True)
 
-        self._pm_active = icons.pixmap(icon_name, "#FFFFFF", 22, 2.1)
-        self._pm_hover = icons.pixmap(icon_name, "#CBD5E1", 22, 2.0)
         self._pm_idle = icons.pixmap(icon_name, theme.ON_DARK_MUTED, 22, 2.0)
+        self._pm_active = icons.pixmap(icon_name, "#FFFFFF", 22, 2.1)
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 7, 0, 6)
-        lay.setSpacing(2)
-        lay.setAlignment(Qt.AlignCenter)
+        self._col_idle = QColor(theme.ON_DARK_MUTED)
+        self._col_hover = QColor("#CBD5E1")
+        self._col_active = QColor("#FFFFFF")
 
-        self.lbl_icon = QLabel()
-        self.lbl_icon.setAlignment(Qt.AlignCenter)
-        self.lbl_icon.setFixedHeight(24)
-        self.lbl_text = QLabel(label)
-        self.lbl_text.setAlignment(Qt.AlignCenter)
-        lay.addWidget(self.lbl_icon)
-        lay.addWidget(self.lbl_text)
-        self._refresh()
+    # ---- propriedades animáveis ----
+    def _get_t(self) -> float:
+        return self._t
+
+    def _set_t(self, v: float) -> None:
+        self._t = v
+        self.update()
+
+    activation = Property(float, _get_t, _set_t)
+
+    def _get_h(self) -> float:
+        return self._h
+
+    def _set_h(self, v: float) -> None:
+        self._h = v
+        self.update()
+
+    hoverProgress = Property(float, _get_h, _set_h)
+
+    def _animate(self, prop: bytes, current: float, target: float, dur: int):
+        anim = QPropertyAnimation(self, prop, self)
+        anim.setDuration(dur)
+        anim.setStartValue(current)
+        anim.setEndValue(target)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.start()
+        return anim
 
     def set_active(self, active: bool) -> None:
-        if self._active != active:
-            self._active = active
-            self._refresh()
-
-    def _refresh(self) -> None:
-        if self._active:
-            self.lbl_icon.setPixmap(self._pm_active)
-            col, weight = "#FFFFFF", "700"
-        elif self._hover:
-            self.lbl_icon.setPixmap(self._pm_hover)
-            col, weight = "#CBD5E1", "600"
-        else:
-            self.lbl_icon.setPixmap(self._pm_idle)
-            col, weight = theme.ON_DARK_MUTED, "500"
-        self.lbl_text.setStyleSheet(
-            f"color:{col}; background:transparent; font-size:8.5pt; "
-            f"font-weight:{weight}; letter-spacing:0.2px;"
-        )
+        target = 1.0 if active else 0.0
+        if abs(self._t - target) < 0.001:
+            return
+        if self._t_anim is not None:
+            self._t_anim.stop()
+        self._t_anim = self._animate(b"activation", self._t, target, 260)
 
     def enterEvent(self, e):
-        self._hover = True
-        self._refresh()
+        if self._h_anim is not None:
+            self._h_anim.stop()
+        self._h_anim = self._animate(b"hoverProgress", self._h, 1.0, theme.DUR_FAST)
         super().enterEvent(e)
 
     def leaveEvent(self, e):
-        self._hover = False
-        self._refresh()
+        if self._h_anim is not None:
+            self._h_anim.stop()
+        self._h_anim = self._animate(b"hoverProgress", self._h, 0.0, theme.DUR_BASE)
         super().leaveEvent(e)
 
     def mousePressEvent(self, e: QMouseEvent):
         if e.button() == Qt.LeftButton:
             self.clicked.emit(self._index)
         super().mousePressEvent(e)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        t, h = self._t, self._h
+
+        # ícone: blend idle → ativo com leve subida
+        icon_size = 22
+        lift = 1.5 * t
+        ix = (self.width() - icon_size) / 2
+        iy = 8 - lift
+        hover_boost = h * (1.0 - t)
+        if t < 1.0:
+            p.setOpacity(1.0 - t * 0.85)
+            p.drawPixmap(int(ix), int(iy), self._pm_idle)
+        alpha_active = max(t, hover_boost * 0.45)
+        if alpha_active > 0.01:
+            p.setOpacity(alpha_active)
+            p.drawPixmap(int(ix), int(iy), self._pm_active)
+        p.setOpacity(1.0)
+
+        # rótulo: cor interpolada + peso conforme ativação
+        base = _mix(self._col_idle, self._col_hover, hover_boost)
+        col = _mix(base, self._col_active, t)
+        font = QFont(theme.FONT_FAMILY)
+        font.setPointSizeF(8.5)
+        font.setWeight(QFont.DemiBold if t > 0.5 else QFont.Medium)
+        font.setLetterSpacing(QFont.AbsoluteSpacing, 0.2)
+        p.setFont(font)
+        p.setPen(col)
+        p.drawText(
+            QRectF(0, 32 - lift * 0.4, self.width(), 18),
+            Qt.AlignHCenter | Qt.AlignVCenter, self._label,
+        )
+        p.end()
 
 
 class _NavPill(QWidget):
@@ -723,7 +876,8 @@ class BottomNavBar(QFrame):
 
         ano = datetime.now().year
         sig = QLabel(
-            f"Criado por <b style='color:#CBD5E1;'>João Carvalho</b><br>"
+            f"Criado por <b style='color:#CBD5E1;'>"
+            f"João Pedro Villas Boas de Carvalho</b><br>"
             f"<span style='color:{theme.ON_DARK_FAINT};'>© {ano} · v1.0</span>"
         )
         sig.setObjectName("BottomNavSignature")
@@ -757,10 +911,12 @@ class BottomNavBar(QFrame):
             self._pill.show()
             return
         anim = QPropertyAnimation(self._pill, b"geometry", self)
-        anim.setDuration(theme.DUR_SLOW)
+        anim.setDuration(380)
         anim.setStartValue(self._pill.geometry())
         anim.setEndValue(target)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
+        curve = QEasingCurve(QEasingCurve.OutBack)
+        curve.setOvershoot(1.1)
+        anim.setEasingCurve(curve)
         anim.start()
         self._pill_anim = anim
 
@@ -1096,15 +1252,6 @@ class ConfirmDialog(BaseDialog):
         self.btn_confirm.setObjectName(
             "DangerButton" if danger else "PrimaryButton"
         )
-        # Para confirmação destrutiva, queremos um botão preenchido em vermelho
-        if danger:
-            self.btn_confirm.setStyleSheet(
-                "QPushButton{background-color:#EF4444;color:#FFFFFF;"
-                "border:1px solid #EF4444;border-radius:8px;"
-                "padding:9px 18px;font-weight:600;}"
-                "QPushButton:hover{background-color:#DC2626;border-color:#DC2626;}"
-                "QPushButton:pressed{background-color:#B91C1C;}"
-            )
         self.btn_confirm.clicked.connect(self.accept)
 
         btn_row.addWidget(self.btn_cancel)

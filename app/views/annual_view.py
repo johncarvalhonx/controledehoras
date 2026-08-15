@@ -139,10 +139,11 @@ class AnnualView(QWidget):
         total_valor = minutes_to_decimal_hours(total_min) * valor_hora
         media_min = total_min // 12
 
-        self.card_total_horas.set_value(minutes_to_hhmm(total_min))
-        self.card_total_valor.set_value(format_brl(total_valor))
-        self.card_media_mes.set_value(minutes_to_hhmm(media_min))
-        self.card_total_anual.set_value(format_brl(salario * 12 + total_valor))
+        fmt_hhmm = lambda v: minutes_to_hhmm(int(round(v)))  # noqa: E731
+        self.card_total_horas.set_numeric(total_min, fmt_hhmm)
+        self.card_total_valor.set_numeric(total_valor, format_brl)
+        self.card_media_mes.set_numeric(media_min, fmt_hhmm)
+        self.card_total_anual.set_numeric(salario * 12 + total_valor, format_brl)
 
         # gráfico (horas decimais por mês)
         horas_por_mes = [minutes_to_decimal_hours(totais.get(m, 0)) for m in range(1, 13)]

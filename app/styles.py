@@ -143,7 +143,7 @@ QLineEdit, QComboBox, QDateEdit {{
     background-color: {SURFACE};
     color: {TEXT};
     border: 1px solid {BORDER_STRONG};
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 10px 13px;
     min-height: 22px;
     selection-background-color: {PRIMARY};
@@ -246,26 +246,26 @@ QPushButton {{
     background-color: {SURFACE};
     color: {TEXT};
     border: 1px solid {BORDER_STRONG};
-    border-radius: 11px;
+    border-radius: 12px;
     padding: 10px 18px;
     font-weight: 600;
     min-height: 22px;
 }}
 QPushButton:hover {{ background-color: {SURFACE_ALT}; border-color: {TEXT_SUBTLE}; color: {PRIMARY_PRESS}; }}
-QPushButton:pressed {{ background-color: {SURFACE_MUTED}; }}
+QPushButton:pressed {{ background-color: {SURFACE_MUTED}; padding-top: 11px; padding-bottom: 9px; }}
 QPushButton:disabled {{ background-color: {SURFACE_MUTED}; color: {TEXT_SUBTLE}; border-color: {BORDER}; }}
 
 QPushButton#PrimaryButton {{
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 {PRIMARY_GRAD_1}, stop:1 {PRIMARY_GRAD_2});
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 {PRIMARY_GRAD_1}, stop:0.55 {PRIMARY_GRAD_2}, stop:1 {PRIMARY_GRAD_3});
     color: #FFFFFF;
     border: 1px solid {PRIMARY};
-    border-radius: 11px;
+    border-radius: 12px;
     font-weight: 700;
 }}
 QPushButton#PrimaryButton:hover {{
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 {PRIMARY} , stop:1 {PRIMARY_HOVER});
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 {PRIMARY}, stop:0.55 {PRIMARY_HOVER}, stop:1 #6D28D9);
     border-color: {PRIMARY_HOVER};
 }}
 QPushButton#PrimaryButton:pressed {{
@@ -274,6 +274,21 @@ QPushButton#PrimaryButton:pressed {{
 QPushButton#PrimaryButton:disabled {{
     background: #A5B4FC; color: #EEF2FF; border-color: #A5B4FC;
 }}
+
+QPushButton#DangerButton {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #F87171, stop:1 {DANGER_DARK});
+    color: #FFFFFF;
+    border: 1px solid {DANGER_DARK};
+    border-radius: 12px;
+    font-weight: 700;
+}}
+QPushButton#DangerButton:hover {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {DANGER}, stop:1 {DANGER_PRESS});
+    border-color: {DANGER_PRESS};
+}}
+QPushButton#DangerButton:pressed {{ background: {DANGER_PRESS}; border-color: {DANGER_PRESS}; }}
 
 QPushButton#GhostButton {{
     background-color: transparent; color: {PRIMARY};
@@ -370,6 +385,14 @@ QLabel#DialogTitle {{
     font-size: 16pt; font-weight: 800; color: {TEXT_STRONG}; background: transparent;
 }}
 QLabel#DialogSubtitle {{ font-size: 9pt; color: {TEXT_MUTED}; background: transparent; }}
+
+/* ================== Estado vazio ================== */
+QLabel#EmptyTitle {{
+    color: {TEXT}; font-size: 12.5pt; font-weight: 700; background: transparent;
+}}
+QLabel#EmptySub {{
+    color: {TEXT_MUTED}; font-size: 9.5pt; background: transparent;
+}}
 
 /* ================== Resumo anual ================== */
 QLabel#AnnualHeaderCell {{

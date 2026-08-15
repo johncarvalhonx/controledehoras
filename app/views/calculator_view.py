@@ -106,7 +106,7 @@ class CalculatorView(QWidget):
         self.btn_zerar.setMinimumWidth(128)
         self.btn_zerar.clicked.connect(self._limpar)
         self.btn_registrar = AnimatedButton(
-            "Usar como novo registro", ripple_light=True
+            "Usar como novo registro", ripple_light=True, glow=True
         )
         self.btn_registrar.setObjectName("PrimaryButton")
         self.btn_registrar.setIcon(icons.icon("corner-down-left", "#FFFFFF", 17, 2.2))
@@ -131,9 +131,11 @@ class CalculatorView(QWidget):
 
     def _recalcular(self) -> None:
         minutos = self._minutos_calculados()
-        self.card_duracao.set_value(minutes_to_hhmm(minutos))
+        self.card_duracao.set_numeric(
+            minutos, lambda v: minutes_to_hhmm(int(round(v)))
+        )
         valor = minutes_to_decimal_hours(minutos) * self.db.get_valor_hora()
-        self.card_valor.set_value(format_brl(valor))
+        self.card_valor.set_numeric(valor, format_brl)
         self.btn_registrar.setEnabled(minutos > 0)
 
     def atualizar_valores(self) -> None:

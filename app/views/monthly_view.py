@@ -1,22 +1,20 @@
 """Tela mensal: registros do mês selecionado + resumo financeiro."""
 from datetime import date
-from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
-    QAbstractItemView, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .. import icons
 from .. import theme
+from ..anim import fade_in, stagger_fade
 from ..config import MESES_PT
 from ..database import Database, Registro
-from ..nf_export import NFExportWorker, default_template_path
 from ..utils import (
-    format_brl, format_date_br, format_valor, minutes_to_decimal_hours,
-    minutes_to_hhmm,
+    format_brl, format_date_br, minutes_to_decimal_hours, minutes_to_hhmm,
 )
 from .custom_widgets import AnimatedButton, ConfirmDialog
 from .record_dialog import RecordDialog
@@ -37,7 +35,8 @@ class MonthlyView(QWidget):
         self.notifier = lambda *_a, **_k: None      # injetado pela MainWindow
         self.open_settings = lambda *_a, **_k: None  # idem
         self._flash_anim: QVariantAnimation | None = None
-        self._nf_worker: NFExportWorker | None = None
+        self._entered = False
+        self._mostrando_vazio = False
         self._build_ui()
         self.seletor.set_month(self.mes_atual, animate=False)
         self.refresh()
@@ -61,18 +60,7 @@ class MonthlyView(QWidget):
         titulos.addWidget(self.lbl_subtitle)
         header.addLayout(titulos, 1)
 
-        self.btn_export = AnimatedButton("Exportar NF")
-        self.btn_export.setIcon(icons.icon("download", theme.PRIMARY, 17, 2.1))
-        self.btn_export.setCursor(Qt.PointingHandCursor)
-        self.btn_export.setMinimumHeight(44)
-        self.btn_export.setMinimumWidth(150)
-        self.btn_export.setToolTip(
-            "Gera o formulário de pedido de NF com o valor final do mês"
-        )
-        self.btn_export.clicked.connect(self._exportar_nf)
-        header.addWidget(self.btn_export, 0, Qt.AlignBottom)
-
-        self.btn_novo = AnimatedButton("Novo registro", ripple_light=True)
+        self.btn_novo = AnimatedButton("Novo registro", ripple_light=True, glow=True)
         self.btn_novo.setObjectName("PrimaryButton")
         self.btn_novo.setIcon(icons.icon("plus", "#FFFFFF", 18, 2.4))
         self.btn_novo.setCursor(Qt.PointingHandCursor)
@@ -176,7 +164,54 @@ class MonthlyView(QWidget):
         self.tabela.setMinimumHeight(220)
         tab_lay.addWidget(self.tabela)
 
+        # Estado vazio (aparece quando o mês não tem registros)
+        self.empty_state = self._build_empty_state()
+        self.empty_state.hide()
+        tab_lay.addWidget(self.empty_state, 1)
+
         root.addWidget(tabela_card, 1)
+        self._tabela_card = tabela_card
+        self._chip_card = chip_card
+        self._info_card = info_card
+
+    def _build_empty_state(self) -> QWidget:
+        host = QWidget()
+        host.setStyleSheet("background: transparent;")
+        lay = QVBoxLayout(host)
+        lay.setContentsMargins(0, 26, 0, 26)
+        lay.setSpacing(6)
+        lay.setAlignment(Qt.AlignCenter)
+
+        chip = QLabel()
+        chip.setFixedSize(72, 72)
+        chip.setAlignment(Qt.AlignCenter)
+        chip.setStyleSheet(
+            f"background-color:{theme.PRIMARY_SOFT}; border-radius:36px;"
+        )
+        chip.setPixmap(icons.pixmap("inbox", theme.PRIMARY, 32, 1.8))
+        lay.addWidget(chip, 0, Qt.AlignHCenter)
+        lay.addSpacing(8)
+
+        titulo = QLabel("Nenhum registro neste mês")
+        titulo.setObjectName("EmptyTitle")
+        titulo.setAlignment(Qt.AlignCenter)
+        lay.addWidget(titulo)
+
+        sub = QLabel("Adicione sua primeira hora extra para ver o resumo do mês.")
+        sub.setObjectName("EmptySub")
+        sub.setAlignment(Qt.AlignCenter)
+        lay.addWidget(sub)
+        lay.addSpacing(12)
+
+        btn = AnimatedButton("Adicionar registro")
+        btn.setObjectName("GhostButton")
+        btn.setIcon(icons.icon("plus", theme.PRIMARY, 16, 2.2))
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setMinimumHeight(40)
+        btn.setMinimumWidth(180)
+        btn.clicked.connect(self._novo_registro)
+        lay.addWidget(btn, 0, Qt.AlignHCenter)
+        return host
 
     def _info(self, icon_name: str, label: str, valor: str) -> tuple[QHBoxLayout, QLabel]:
         row = QHBoxLayout()
@@ -221,15 +256,27 @@ class MonthlyView(QWidget):
 
         total_min = sum(r.minutos for r in registros)
         valor_extra = minutes_to_decimal_hours(total_min) * valor_hora
-        self.card_horas.set_value(minutes_to_hhmm(total_min))
-        self.card_valor_extra.set_value(format_brl(valor_extra))
-        self.card_salario_total.set_value(format_brl(salario + valor_extra))
+        self.card_horas.set_numeric(
+            total_min, lambda v: minutes_to_hhmm(int(round(v)))
+        )
+        self.card_valor_extra.set_numeric(valor_extra, format_brl)
+        self.card_salario_total.set_numeric(salario + valor_extra, format_brl)
 
         qtd = len(registros)
         self.lbl_qtd.setText(
             "Nenhum registro" if qtd == 0
             else f"{qtd} registro{'s' if qtd != 1 else ''}"
         )
+
+        # alterna tabela ⇄ estado vazio com um fade suave
+        vazio = qtd == 0
+        if vazio != self._mostrando_vazio:
+            self._mostrando_vazio = vazio
+            self.tabela.setVisible(not vazio)
+            self.empty_state.setVisible(vazio)
+            alvo = self.empty_state if vazio else self.tabela
+            if self.isVisible():
+                fade_in(alvo, duration=240)
 
     def _preencher_tabela(self, registros: list[Registro]) -> None:
         valor_hora = self.db.get_valor_hora()
@@ -396,61 +443,18 @@ class MonthlyView(QWidget):
             self.data_changed.emit()
 
     # ---------------------------------------------------------------
-    #  Exportar NF
-    # ---------------------------------------------------------------
-    def _valor_final_mes(self) -> float:
-        """Salário base + valor das horas extras do mês selecionado."""
-        registros = self.db.listar_mes(self.ano_atual, self.mes_atual)
-        total_min = sum(r.minutos for r in registros)
-        extra = minutes_to_decimal_hours(total_min) * self.db.get_valor_hora()
-        return self.db.get_salario() + extra
-
-    def _exportar_nf(self) -> None:
-        if self._nf_worker is not None and self._nf_worker.isRunning():
-            return
-
-        template = default_template_path()
-        if not template.exists():
-            ConfirmDialog(
-                "Modelo não encontrado",
-                "O modelo do formulário de NF não foi localizado.\n"
-                "Reinstale o aplicativo para restaurá-lo.",
-                confirm_text="OK", cancel_text="", parent=self.window(),
-            ).exec()
-            return
-
-        valor = format_valor(self._valor_final_mes())
-        mes_nome = MESES_PT[self.mes_atual - 1]
-        destino = Path.home() / "Downloads"
-        if not destino.exists():
-            destino = Path.home()
-        sugestao = str(destino / f"Pedido NF - {mes_nome} {self.ano_atual}.doc")
-
-        out_path, _ = QFileDialog.getSaveFileName(
-            self.window(), "Exportar NF", sugestao,
-            "Documento Word (*.doc);;Documento Word (*.docx);;PDF (*.pdf)",
-        )
-        if not out_path:
-            return
-
-        self._set_export_loading(True)
-        self.notifier(f"Gerando NF com o valor R$ {valor}…", "info")
-        self._nf_worker = NFExportWorker(str(template), out_path, valor)
-        self._nf_worker.succeeded.connect(self._nf_ok)
-        self._nf_worker.failed.connect(self._nf_err)
-        self._nf_worker.start()
-
-    def _set_export_loading(self, loading: bool) -> None:
-        self.btn_export.setEnabled(not loading)
-        self.btn_export.setText("Exportando…" if loading else "Exportar NF")
-
-    def _nf_ok(self, path: str) -> None:
-        self._set_export_loading(False)
-        self.notifier(f"NF exportada: {Path(path).name}", "success")
-
-    def _nf_err(self, msg: str) -> None:
-        self._set_export_loading(False)
-        ConfirmDialog(
-            "Não foi possível exportar a NF", msg,
-            confirm_text="OK", cancel_text="", parent=self.window(),
-        ).exec()
+    def showEvent(self, e):
+        super().showEvent(e)
+        if not self._entered:
+            self._entered = True
+            stagger_fade(
+                [
+                    self._chip_card,
+                    self.card_horas,
+                    self.card_valor_extra,
+                    self.card_salario_total,
+                    self._info_card,
+                    self._tabela_card,
+                ],
+                start_delay=60, step=70, duration=430,
+            )

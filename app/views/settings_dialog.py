@@ -96,7 +96,9 @@ class SettingsDialog(BaseDialog):
         cancelar.clicked.connect(self.reject)
         botoes.addWidget(cancelar)
 
-        self.btn_salvar = AnimatedButton("Salvar configurações", ripple_light=True)
+        self.btn_salvar = AnimatedButton(
+            "Salvar configurações", ripple_light=True, glow=True
+        )
         self.btn_salvar.setObjectName("PrimaryButton")
         self.btn_salvar.setIcon(icons.icon("check", "#FFFFFF", 16, 2.3))
         self.btn_salvar.setCursor(Qt.PointingHandCursor)

@@ -1,11 +1,15 @@
-"""Toasts — notificações discretas e animadas no canto da janela."""
+"""Toasts — notificações discretas e animadas no canto da janela.
+
+v2: chip de ícone tonal, barra de progresso do tempo restante, clique para
+fechar e entrada com leve efeito de mola.
+"""
 from __future__ import annotations
 
 from PySide6.QtCore import (
-    QAbstractAnimation, QEasingCurve, QPoint, QPropertyAnimation, QTimer, Qt,
-    QEvent,
+    QAbstractAnimation, QEasingCurve, QEvent, QPoint, QPropertyAnimation,
+    QTimer, QVariantAnimation, Qt, Signal,
 )
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QHBoxLayout, QLabel, QWidget
 
 from .. import icons
@@ -13,39 +17,77 @@ from .. import theme
 from .widgets import attach_shadow
 
 _KINDS = {
-    "success": {"icon": "check-circle", "fg": theme.ACCENT_DARK, "bar": theme.ACCENT},
-    "error":   {"icon": "alert-triangle", "fg": theme.DANGER_DARK, "bar": theme.DANGER},
-    "info":    {"icon": "info", "fg": theme.PRIMARY, "bar": theme.PRIMARY},
+    "success": {
+        "icon": "check-circle", "fg": theme.ACCENT_DARK,
+        "bar": theme.ACCENT, "chip": theme.ACCENT_SOFT,
+    },
+    "error": {
+        "icon": "alert-triangle", "fg": theme.DANGER_DARK,
+        "bar": theme.DANGER, "chip": theme.DANGER_SOFT,
+    },
+    "info": {
+        "icon": "info", "fg": theme.PRIMARY,
+        "bar": theme.PRIMARY, "chip": theme.PRIMARY_SOFT,
+    },
 }
 
 
 class Toast(QWidget):
-    def __init__(self, message: str, kind: str, parent=None):
+    dismissed = Signal(object)  # emitido ao clicar (self)
+
+    def __init__(self, message: str, kind: str, timeout: int, parent=None):
         super().__init__(parent)
         cfg = _KINDS.get(kind, _KINDS["info"])
         self._bar = QColor(cfg["bar"])
+        self._chip_bg = QColor(cfg["chip"])
+        self._progress = 1.0
         self.setAttribute(Qt.WA_StyledBackground, False)
+        self.setCursor(Qt.PointingHandCursor)
         attach_shadow(self, blur=30, dy=10, alpha=55)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(16, 12, 18, 12)
+        lay.setContentsMargins(14, 12, 18, 14)
         lay.setSpacing(12)
 
-        icon = QLabel()
-        icon.setFixedSize(26, 26)
-        icon.setAlignment(Qt.AlignCenter)
-        icon.setPixmap(icons.pixmap(cfg["icon"], cfg["fg"], 24, 2.2))
-        lay.addWidget(icon, 0)
+        chip = QLabel()
+        chip.setFixedSize(32, 32)
+        chip.setAlignment(Qt.AlignCenter)
+        chip.setStyleSheet(
+            f"background-color:{cfg['chip']}; border-radius:9px;"
+        )
+        chip.setPixmap(icons.pixmap(cfg["icon"], cfg["fg"], 19, 2.2))
+        lay.addWidget(chip, 0, Qt.AlignVCenter)
 
         text = QLabel(message)
         text.setStyleSheet(
-            f"color:{theme.TEXT}; background:transparent; font-size:9.5pt; font-weight:600;"
+            f"color:{theme.TEXT}; background:transparent; "
+            "font-size:9.5pt; font-weight:600;"
         )
         text.setWordWrap(True)
         lay.addWidget(text, 1)
 
-        self.setFixedWidth(330)
+        self.setFixedWidth(340)
         self.adjustSize()
+
+        # barra de progresso do tempo restante
+        self._progress_anim = QVariantAnimation(self)
+        self._progress_anim.setStartValue(1.0)
+        self._progress_anim.setEndValue(0.0)
+        self._progress_anim.setDuration(timeout)
+
+        def _tick(v):
+            self._progress = float(v)
+            self.update()
+
+        self._progress_anim.valueChanged.connect(_tick)
+        self._progress_anim.start()
+
+    def mousePressEvent(self, e: QMouseEvent):
+        if e.button() == Qt.LeftButton:
+            self.dismissed.emit(self)
+            e.accept()
+            return
+        super().mousePressEvent(e)
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -54,9 +96,18 @@ class Toast(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(theme.SURFACE))
         p.drawRoundedRect(r, 12, 12)
-        # barra de acento à esquerda
-        p.setBrush(self._bar)
-        p.drawRoundedRect(0, 8, 4, r.height() - 16, 2, 2)
+
+        # barra de progresso na base (encolhe conforme o tempo passa)
+        if self._progress > 0.005:
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, r.width(), r.height(), 12, 12)
+            p.setClipPath(path)
+            track = QColor(self._bar)
+            track.setAlpha(36)
+            p.setBrush(track)
+            p.drawRect(0, r.height() - 3, r.width(), 3)
+            p.setBrush(self._bar)
+            p.drawRect(0, r.height() - 3, int(r.width() * self._progress), 3)
         p.end()
 
 
@@ -71,8 +122,9 @@ class ToastManager:
         self._toasts: list[Toast] = []
         host.installEventFilter(_HostWatcher(self))
 
-    def show(self, message: str, kind: str = "success", timeout: int = 2600) -> None:
-        toast = Toast(message, kind, self._host)
+    def show(self, message: str, kind: str = "success", timeout: int = 3000) -> None:
+        toast = Toast(message, kind, timeout, self._host)
+        toast.dismissed.connect(self._dismiss)
         toast.show()
         self._toasts.append(toast)
         self._relayout(animate_new=toast)
@@ -81,22 +133,27 @@ class ToastManager:
     def _dismiss(self, toast: Toast) -> None:
         if toast not in self._toasts:
             return
+        self._toasts.remove(toast)
+
+        # fade + deslize para a direita
         eff = QGraphicsOpacityEffect(toast)
         toast.setGraphicsEffect(eff)
-        anim = QPropertyAnimation(eff, b"opacity", toast)
-        anim.setDuration(200)
-        anim.setStartValue(1.0)
-        anim.setEndValue(0.0)
-        anim.setEasingCurve(QEasingCurve.InCubic)
+        fade = QPropertyAnimation(eff, b"opacity", toast)
+        fade.setDuration(190)
+        fade.setStartValue(1.0)
+        fade.setEndValue(0.0)
+        fade.setEasingCurve(QEasingCurve.InCubic)
 
-        def done():
-            if toast in self._toasts:
-                self._toasts.remove(toast)
-            toast.deleteLater()
-            self._relayout()
+        slide = QPropertyAnimation(toast, b"pos", toast)
+        slide.setDuration(190)
+        slide.setStartValue(toast.pos())
+        slide.setEndValue(toast.pos() + QPoint(34, 0))
+        slide.setEasingCurve(QEasingCurve.InCubic)
 
-        anim.finished.connect(done)
-        anim.start(QAbstractAnimation.DeleteWhenStopped)
+        fade.finished.connect(toast.deleteLater)
+        fade.finished.connect(self._relayout)
+        fade.start(QAbstractAnimation.DeleteWhenStopped)
+        slide.start(QAbstractAnimation.DeleteWhenStopped)
 
     def _relayout(self, animate_new: Toast | None = None) -> None:
         if not self._host:
@@ -109,13 +166,15 @@ class ToastManager:
             toast.resize(tw, th)
             target = QPoint(x_right - tw, y)
             if toast is animate_new:
-                start = QPoint(x_right - tw + 40, y)
+                start = QPoint(x_right - tw + 56, y)
                 toast.move(start)
                 anim = QPropertyAnimation(toast, b"pos", toast)
-                anim.setDuration(theme.DUR_BASE)
+                anim.setDuration(340)
                 anim.setStartValue(start)
                 anim.setEndValue(target)
-                anim.setEasingCurve(QEasingCurve.OutCubic)
+                curve = QEasingCurve(QEasingCurve.OutBack)
+                curve.setOvershoot(1.2)
+                anim.setEasingCurve(curve)
                 anim.start(QAbstractAnimation.DeleteWhenStopped)
             else:
                 anim = QPropertyAnimation(toast, b"pos", toast)

@@ -1,6 +1,6 @@
 """Barra de título customizada — substitui a moldura nativa do Windows."""
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QColor, QLinearGradient, QMouseEvent, QPainter
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel
 
 from .. import icons
@@ -53,6 +53,19 @@ class TitleBar(QFrame):
         layout.addWidget(self.btn_min)
         layout.addWidget(self.btn_max)
         layout.addWidget(self.btn_close)
+
+    # ----- acento de marca -----
+    def paintEvent(self, e):
+        super().paintEvent(e)  # QSS pinta o gradiente de fundo
+        p = QPainter(self)
+        grad = QLinearGradient(0, 0, self.width(), 0)
+        grad.setColorAt(0.0, QColor(theme.PRIMARY_GRAD_1))
+        grad.setColorAt(0.55, QColor(theme.PRIMARY_GRAD_3))
+        grad.setColorAt(1.0, QColor(theme.ACCENT))
+        p.setPen(Qt.NoPen)
+        p.setBrush(grad)
+        p.drawRect(0, self.height() - 2, self.width(), 2)
+        p.end()
 
     # ----- drag / double-click -----
     def mousePressEvent(self, e: QMouseEvent):

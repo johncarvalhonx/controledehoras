@@ -26,10 +26,6 @@ pyinstaller --noconfirm --clean --windowed --onefile ^
     --add-data "app\assets;app\assets" ^
     --hidden-import PySide6.QtSvg ^
     --collect-submodules PySide6.QtSvg ^
-    --hidden-import win32com ^
-    --hidden-import win32com.client ^
-    --hidden-import pythoncom ^
-    --hidden-import pywintypes ^
     main.py
 
 echo.

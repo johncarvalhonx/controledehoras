@@ -1,10 +1,9 @@
 """Diálogo frameless para adicionar / editar um registro de hora extra."""
 from datetime import date
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QHBoxLayout, QLabel, QLineEdit,
-    QVBoxLayout, QWidget,
+    QComboBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget,
 )
 
 from .. import icons
@@ -12,6 +11,7 @@ from ..utils import gerar_opcoes_hhmm, hhmm_to_minutes
 from .custom_widgets import (
     AnimatedButton, BaseDialog, ConfirmDialog, PlusMinusSpin,
 )
+from .date_picker import DatePickerField
 from .widgets import field_label
 
 
@@ -56,10 +56,7 @@ class RecordDialog(BaseDialog):
 
         # ----- Data
         layout.addWidget(field_label("Data"))
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDisplayFormat("dd/MM/yyyy")
-        self.date_edit.setDate(QDate.currentDate())
+        self.date_edit = DatePickerField(date.today())
         layout.addWidget(self.date_edit)
 
         # ----- Duração
@@ -114,7 +111,9 @@ class RecordDialog(BaseDialog):
         cancelar.clicked.connect(self.reject)
         botoes.addWidget(cancelar)
 
-        self.btn_salvar = AnimatedButton("Salvar registro", ripple_light=True)
+        self.btn_salvar = AnimatedButton(
+            "Salvar registro", ripple_light=True, glow=True
+        )
         self.btn_salvar.setObjectName("PrimaryButton")
         self.btn_salvar.setIcon(icons.icon("save", "#FFFFFF", 16, 2.1))
         self.btn_salvar.setCursor(Qt.PointingHandCursor)
@@ -129,16 +128,12 @@ class RecordDialog(BaseDialog):
     # ----------------------------------------------------------------
     def _preencher(self, registro, data_default, minutos_default) -> None:
         if registro is not None:
-            self.date_edit.setDate(QDate(
-                registro.data.year, registro.data.month, registro.data.day
-            ))
+            self.date_edit.setDate(registro.data)
             self.motivo.setText(registro.motivo)
             self._setar_minutos(registro.minutos)
         else:
             if data_default is not None:
-                self.date_edit.setDate(QDate(
-                    data_default.year, data_default.month, data_default.day
-                ))
+                self.date_edit.setDate(data_default)
             if minutos_default is not None and minutos_default > 0:
                 self._setar_minutos(minutos_default)
 
@@ -183,9 +178,8 @@ class RecordDialog(BaseDialog):
 
     # API pública
     def get_dados(self) -> tuple[date, int, str]:
-        qd = self.date_edit.date()
         return (
-            date(qd.year(), qd.month(), qd.day()),
+            self.date_edit.date(),
             self._minutos_selecionados(),
             self.motivo.text().strip(),
         )

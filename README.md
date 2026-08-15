@@ -1,90 +1,77 @@
-<div align="center">
+# Controle de Horas Extras
 
-# ⏱️ Controle de Horas Extras
+Aplicativo desktop para Windows que registra horas extras, calcula o valor a
+receber e consolida os totais do mês e do ano. Feito em Python com PySide6
+(Qt 6) e banco de dados local em SQLite.
 
-**Registre, acompanhe e calcule suas horas extras mensais — com uma interface desktop premium.**
+Os dados ficam somente na máquina do usuário, em
+`%APPDATA%\ControleHoras\horas.db`. Não há servidor, conta ou sincronização.
 
-Aplicativo desktop para Windows feito em **Python + PySide6 (Qt 6)**, com banco local **SQLite** e uma UI totalmente customizada: janela sem moldura nativa, ícones vetoriais, animações fluidas e microinterações.
+## Telas
 
-<br/>
+### Controle mensal
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![PySide6](https://img.shields.io/badge/PySide6-Qt%206-41CD52?style=for-the-badge&logo=qt&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-local-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Windows](https://img.shields.io/badge/Windows-desktop-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-A31F34?style=for-the-badge)
+Registros do mês selecionado, com o total de horas, o valor das extras e o
+salário estimado.
 
-<br/>
+![Tela de controle mensal](docs/screenshots/mensal.png)
 
-`#4F46E5` Índigo · `#10B981` Esmeralda · `#8B5CF6` Violeta — tipografia **Inter**
+### Resumo anual
 
-</div>
+Totais consolidados do ano, gráfico de horas por mês e detalhamento mês a mês.
 
----
+![Tela de resumo anual](docs/screenshots/anual.png)
 
-## ✨ Sobre
+### Calculadora de horas
 
-O **Controle de Horas Extras** transforma o registro de horas em algo simples e
-agradável. Você cadastra cada hora extra (data, duração e motivo), navega por
-mês, e o app calcula automaticamente o total de horas, o valor a receber e o
-salário estimado — tudo numa interface com acabamento de produto comercial.
+Calcula a duração entre dois horários, com desconto de intervalo e suporte a
+turnos que cruzam a meia-noite. O resultado pode virar um registro direto.
 
-A versão **2.0** é uma reescrita profunda de UI/UX, organizada em camadas
-reutilizáveis e com identidade visual própria.
+![Tela da calculadora de horas](docs/screenshots/calculadora.png)
 
----
+### Registro e configurações
 
-## 🎯 Recursos
+| Novo registro | Configurações |
+| --- | --- |
+| ![Diálogo de novo registro](docs/screenshots/registro.png) | ![Diálogo de configurações](docs/screenshots/configuracoes.png) |
 
-| | Funcionalidade |
-|---|---|
-| 📝 | **Cadastro completo** — criar, editar e excluir horas extras (data, duração, motivo). |
-| 📅 | **Navegação por mês** — seletor Jan–Dez com pílula indicadora deslizante. |
-| 🧮 | **Resumo automático** — total de horas, valor das extras, salário estimado, totais mensais e anual. |
-| ⏰ | **Calculadora de horas** — desconto de intervalo e suporte a virada de dia; vira registro em um clique. |
-| ⚙️ | **Personalização** — defina seu **salário base** e o **valor da hora extra**; salvos no banco e aplicados na hora. |
-| 📊 | **Dashboard anual** — cards de resumo, gráfico de barras animado e tabela detalhada. |
-| 📄 | **Exportar NF** — gera o pedido de nota fiscal (.doc / .docx / .pdf) com o valor do mês preenchido. |
-| 🔔 | **Toasts** — notificações discretas de sucesso, info e erro. |
+## Funcionalidades
 
----
+- Cadastro, edição e exclusão de horas extras, com data, duração e motivo.
+- Navegação entre os meses do ano.
+- Cálculo automático do total de horas, do valor das extras e do salário
+  estimado do mês.
+- Resumo anual com total de horas, valor recebido, média mensal e gráfico de
+  horas por mês.
+- Calculadora de horas com desconto de intervalo e virada de dia.
+- Salário base e valor da hora extra configuráveis, salvos no banco.
 
-## 🎨 Experiência visual (v2.0)
-
-- **Identidade própria** — paleta índigo + esmeralda + violeta, fundo em camadas, cantos arredondados e tokens centralizados em [`app/theme.py`](app/theme.py).
-- **Ícones vetoriais (SVG, estilo Lucide)** renderizados via `QtSvg`, coloridos dinamicamente e cacheados — nítidos em qualquer DPI, **nenhum emoji** como ícone.
-- **Janela frameless** com sombra própria, arrastável pela barra de título e redimensionável pelas bordas; botões min / max / fechar pintados via `QPainter` com hover animado.
-- **Navegação inferior** com indicador (cápsula) que desliza entre as abas.
-- **Transição entre telas** com deslize lateral fluido, estilo iOS.
-- **Cards premium** — chip de ícone tonal, sombra real que se eleva no hover e *pulse* ao atualizar o valor.
-- **Calculadora** com números em animação tipo *odômetro* (slide vertical + fade).
-- **Tabela moderna** — cabeçalho em pill, hover de linha e *flash* na linha recém-editada.
-- **Animações reutilizáveis** centralizadas em [`app/anim.py`](app/anim.py) com curvas suaves (ease-out / out-quint).
-- **HiDPI** via `Qt.HighDpiScaleFactorRoundingPolicy.PassThrough`.
-
----
-
-## 💰 Como o cálculo funciona
+## Como o cálculo funciona
 
 ```
-valor_extra            = total_horas_decimais × valor_da_hora
-salario_total_estimado = salário_base + valor_extra
+valor_extra            = total_de_horas_decimais * valor_da_hora
+salario_total_estimado = salario_base + valor_extra
 ```
 
-| Parâmetro | Padrão (1ª execução) | Onde fica depois |
-|-----------|----------------------|------------------|
-| Salário base | **R$ 7.150,00** | Persistido na tabela `settings` do SQLite |
-| Valor da hora | **R$ 42,55** | Editável a qualquer momento nas **Configurações** (⚙) |
+O total de minutos do mês é convertido em horas decimais e multiplicado pelo
+valor da hora extra. O resultado é somado ao salário base para chegar ao
+salário estimado do mês.
 
-> Os valores padrão vivem em [`app/config.py`](app/config.py) e são usados apenas
-> na primeira execução. Depois, ficam salvos no banco e podem ser alterados pelo
-> próprio usuário.
+| Parâmetro | Valor inicial | Onde fica depois |
+| --- | --- | --- |
+| Salário base | R$ 7.150,00 | Tabela `settings` do SQLite |
+| Valor da hora extra | R$ 42,55 | Tabela `settings` do SQLite |
 
----
+Os valores iniciais estão em [`app/config.py`](app/config.py) e são usados
+apenas na primeira execução. Depois disso valem os valores salvos no banco,
+alteráveis a qualquer momento pelo botão de configurações.
 
-## 🚀 Como executar (desenvolvimento)
+## Requisitos
 
-> Requer **Python 3.10+** no Windows.
+- Windows
+- Python 3.10 ou superior
+
+## Como executar
 
 ```powershell
 python -m venv .venv
@@ -93,15 +80,11 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Os dados ficam em `%APPDATA%\ControleHoras\horas.db`.
+## Como gerar o executável
 
----
-
-## 📦 Gerar o `.exe`
-
-Basta rodar o `build.bat` na raiz — ele cria a venv (se preciso), instala as
-dependências + PyInstaller e empacota o app (one-file, sem console, com assets e
-fontes embarcados):
+O `build.bat` cria o ambiente virtual (se ainda não existir), instala as
+dependências junto com o PyInstaller e empacota o aplicativo em um único
+arquivo, sem console e com os assets embutidos:
 
 ```powershell
 .\build.bat
@@ -109,8 +92,7 @@ fontes embarcados):
 
 O executável final fica em `dist\Controle de Horas.exe`.
 
-<details>
-<summary>Empacotar manualmente</summary>
+Para empacotar manualmente:
 
 ```powershell
 pyinstaller --noconfirm --clean --windowed --onefile `
@@ -121,66 +103,49 @@ pyinstaller --noconfirm --clean --windowed --onefile `
     main.py
 ```
 
-</details>
-
-> **Exportar NF** usa automação do **Microsoft Word** (pywin32) — requer o Word
-> instalado no Windows.
-
----
-
-## 🗂️ Estrutura
+## Estrutura do projeto
 
 ```
 Controle de Horas/
-├── main.py                      # entrada — HiDPI, fonte Inter, paleta, QSS
+├── main.py                      # ponto de entrada: HiDPI, fonte, paleta e QSS
 ├── requirements.txt
 ├── build.bat
-├── README.md
 └── app/
-    ├── config.py                # salário base / valor da hora / meses
-    ├── database.py              # SQLite (CRUD + agregações)
-    ├── utils.py                 # formatadores BRL / data / horas
-    ├── theme.py                 # tokens de design (cores, raios, tempos)
-    ├── icons.py                 # ícones vetoriais SVG (QtSvg) + cache
-    ├── anim.py                  # helpers de animação reutilizáveis
-    ├── styles.py                # QSS global (consome theme.py)
-    ├── nf_export.py             # exportação da NF via Word COM (pywin32)
-    ├── assets/                  # SVGs, modelo de NF e fontes Inter
+    ├── config.py                # valores iniciais, meses e caminho do banco
+    ├── database.py              # SQLite: CRUD e agregações
+    ├── utils.py                 # formatação de moeda, data e horas
+    ├── theme.py                 # constantes de cor, raio e tempo
+    ├── icons.py                 # ícones SVG renderizados via QtSvg
+    ├── anim.py                  # animações reutilizáveis
+    ├── styles.py                # folha de estilo global (QSS)
+    ├── assets/                  # ícones SVG e fontes
     └── views/
-        ├── window_controls.py   # botões min/max/restore/close
-        ├── title_bar.py         # barra de título customizada
-        ├── custom_widgets.py    # widgets animados (botões, pickers, nav…)
-        ├── widgets.py           # Card, SummaryCard, MonthSelector
-        ├── toast.py             # notificações (toasts) animadas
-        ├── chart.py             # gráfico de barras (QPainter)
-        ├── main_window.py       # QMainWindow frameless + entrada animada
-        ├── monthly_view.py      # tela mensal
-        ├── annual_view.py       # dashboard anual
-        ├── calculator_view.py   # calculadora de horas
-        ├── settings_dialog.py   # ⚙ configurações
-        └── record_dialog.py     # diálogo de novo/editar registro
+        ├── main_window.py       # janela principal e navegação
+        ├── title_bar.py         # barra de título
+        ├── window_controls.py   # botões de minimizar, maximizar e fechar
+        ├── monthly_view.py      # tela de controle mensal
+        ├── annual_view.py       # tela de resumo anual
+        ├── calculator_view.py   # tela da calculadora
+        ├── record_dialog.py     # diálogo de novo registro e edição
+        ├── settings_dialog.py   # diálogo de configurações
+        ├── date_picker.py       # campo de data com calendário
+        ├── custom_widgets.py    # botões, seletores e navegação
+        ├── widgets.py           # cards e seletor de mês
+        ├── chart.py             # gráfico de barras
+        └── toast.py             # notificações
 ```
 
----
+## Tecnologias
 
-## 🛠️ Tech stack
+- Python 3.10 ou superior
+- PySide6 (Qt 6) para a interface, animações e gráficos
+- SQLite para o armazenamento local
+- PyInstaller para a geração do executável
 
-- **Python 3.10+**
-- **PySide6** (Qt 6) — UI, animações (`QPropertyAnimation`, `QEasingCurve`) e gráficos (`QPainter`)
-- **SQLite** — armazenamento local
-- **pywin32** — automação do Word para exportação de NF (Windows)
-- **PyInstaller** — empacotamento em `.exe`
+## Licença
 
----
+Distribuído sob a Licença MIT. Veja o arquivo [`LICENSE`](LICENSE).
 
-## 📄 Licença
+## Autor
 
-Distribuído sob a **Licença MIT**. Veja o arquivo [`LICENSE`](LICENSE) para mais detalhes.
-
----
-
-<div align="center">
-
-Criado por **João Carvalho** · © 2026 · v1.0
-
-</div>
+João Pedro Villas Boas de Carvalho

@@ -12,6 +12,7 @@ PRIMARY_HOVER  = "#4338CA"   # indigo-700
 PRIMARY_PRESS  = "#3730A3"   # indigo-800
 PRIMARY_GRAD_1 = "#6366F1"   # topo do gradiente (indigo-500)
 PRIMARY_GRAD_2 = "#4F46E5"   # base do gradiente (indigo-600)
+PRIMARY_GRAD_3 = "#7C3AED"   # fim do gradiente de marca (violet-600)
 PRIMARY_SOFT   = "#EEF2FF"   # indigo-50
 PRIMARY_SOFT_2 = "#E0E7FF"   # indigo-100
 PRIMARY_TINT   = "#C7D2FE"   # indigo-200
@@ -79,9 +80,10 @@ RADIUS_LG   = 16
 RADIUS_XL   = 20
 RADIUS_PILL = 999
 
-DUR_FAST = 140
-DUR_BASE = 220
-DUR_SLOW = 320
+DUR_FAST   = 140
+DUR_BASE   = 220
+DUR_SLOW   = 320
+DUR_SLOWER = 460
 
 FONT_FAMILY = "Inter"
 
